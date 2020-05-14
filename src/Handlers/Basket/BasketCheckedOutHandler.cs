@@ -39,7 +39,7 @@ namespace MedPark.OrderService.Handlers.Basket
 
             //Create new order line items
             List<LineItem> orderItems = new List<LineItem>();
-            @event.Items.ToList().ForEach(async (item) =>
+            @event.Items.ToList().ForEach((item) =>
             {
                 LineItem orderItem = new LineItem(item.Id);
 
@@ -47,9 +47,9 @@ namespace MedPark.OrderService.Handlers.Basket
                 orderItem.SetQuantity(item.Quantity);
 
                 orderItems.Add(orderItem);
-
-                await _lineItemsRepo.AddAsync(orderItem);
             });
+
+            await _lineItemsRepo.AddAllAsync(orderItems);
 
             //Publish Order Placed event
             await _busPublisher.PublishAsync(new OrderPlaced(newOrder.Id, newOrder.CustomerId, newOrder.OrderTotal), null);
