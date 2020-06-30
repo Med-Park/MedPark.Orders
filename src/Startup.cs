@@ -6,7 +6,9 @@ using System.Threading.Tasks;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using AutoMapper;
+using Consul;
 using MedPark.Common;
+using MedPark.Common.Consul;
 using MedPark.Common.RabbitMq;
 using MedPark.OrderService.Domain;
 using MedPark.OrderService.Messages.Commands;
@@ -38,6 +40,8 @@ namespace MedPark.OrderService
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddAutoMapper(typeof(Startup));
+            services.AddHealthChecks();
+            services.AddConsul();
 
             //Add DBContext
             services.AddDbContext<OrderingDbContext>(options => options.UseSqlServer(Configuration["Database:ConnectionString"]));
@@ -58,7 +62,7 @@ namespace MedPark.OrderService
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostEnvironment env)
+        public void Configure(IApplicationBuilder app, IHostEnvironment env, IHostApplicationLifetime lifetime, IConsulClient consulClient)
         {
             if (env.IsDevelopment())
             {
@@ -70,7 +74,12 @@ namespace MedPark.OrderService
                 app.UseHsts();
             }
 
-            app.UseHttpsRedirection();
+            app.UseHttpsRedirection(); 
+            app.UseRouting();
+            app.UseEndpoints(endpoit =>
+            {
+                endpoit.MapHealthChecks("/health");
+            });
 
             app.UseRabbitMq()
                 .SubscribeCommand<RemoveItemFromOrder>()
@@ -81,6 +90,12 @@ namespace MedPark.OrderService
                 .SubscribeEvent<AddressCreated>(@namespace: "customers")
                 .SubscribeEvent<BasketCheckedOut>(@namespace: "basket-service")
                 .SubscribeEvent<CustomerDetailsUpated>(@namespace: "customers");
+
+            var serviceID = app.UseConsul();
+            lifetime.ApplicationStopped.Register(() =>
+            {
+                consulClient.Agent.ServiceDeregister(serviceID);
+            });
 
             app.UseMvcWithDefaultRoute();
         }
